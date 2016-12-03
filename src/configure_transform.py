@@ -5,39 +5,14 @@ import re
 import sys
 sys.path.append('../libexec/python')
 
-from utils import check_exists
+from utils import ( 
+    get_fullpath,
+    read_file,
+    write_file
+)
+
 from logman import logger
 import argparse
-
-define_re = re.compile("#define ([A-Z_]+) (.*)")
-
-# ../src/lib/config_defaults.h singularity.conf.in singularity.conf
-
-defaultfile = open(sys.argv[1], "r")
-infile = open(sys.argv[2], "r")
-outfile = open(sys.argv[3] + ".tmp", "w")
-
-data = infile.read()
-
-defaults = {}
-for line in defaultfile:
-    m = define_re.match(line)
-    if m:
-        key, value = m.groups()
-        defaults[key] = value
-
-for key, value in defaults.items():
-    new_value = value.replace('"', '')
-    if new_value == "1":
-        new_value = "yes"
-    elif new_value == "0":
-        new_value = "no"
-    data = data.replace("@" + key + "@", new_value)
-
-outfile.write(data)
-outfile.close()
-os.rename(sys.argv[3] + ".tmp", sys.argv[3])
-
 
 
 def get_parser():
@@ -69,8 +44,7 @@ def get_parser():
 
 
 def main():
-    '''main is a wrapper for the client to hand the parser to the executable functions
-    This makes it possible to set up a parser in test cases
+    '''parse configuration options and produce configuration output file
     '''
     logger.info("\n*** STARTING PYTHON CONFIGURATION HELPER ****")
     parser = get_parser()
@@ -88,20 +62,44 @@ def main():
 
 def configure(args):
 
-    # Find root filesystem location
-    if args.rootfs != None:
-       singularity_rootfs = args.rootfs
-       logger.info("Root file system defined by command line variable as %s", singularity_rootfs)
-    else:
-       singularity_rootfs = os.environ.get("SINGULARITY_ROOTFS", None)
-       if singularity_rootfs == None:
-           logger.error("root file system not specified OR defined as environmental variable, exiting!")
-           sys.exit(1)
-       logger.info("Root file system defined by env variable as %s", singularity_rootfs)
 
-    # Does the registry require authentication?
+    # Get fullpath to each file, and concurrently check that exists
+    defaultfile = get_fullpath(args.defaults) # ../src/lib/config_defaults.h
+    infile = get_fullpath(args.infile)       # singularity.conf.in
 
-        logger.info("*** FINISHING DOCKER BOOTSTRAP PYTHON PORTION ****\n")
+    # Find define statements
+    define_re = re.compile("#define ([A-Z_]+) (.*)")
+
+    # Read in input and default files
+    defaultfile = read_file(defaultfile)
+    data = "".join(read_file(infile))
+
+    # Lookup for values we want replaced
+    lookup = {'0':'no',
+              '1':'yes'}
+
+    defaults = {}
+    # Read in defaults to dictionary
+    for line in defaultfile:
+        match = define_re.match(line)
+        if match:
+            key, value = match.groups()
+
+            # Maintain the original default set by user
+            defaults[key] = value
+
+            # Use parsed value for final config
+            new_value = value.replace('"', '')
+            if new_value in lookup:
+                new_value = lookup[new_value]
+            data = data.replace("@" + key + "@", new_value)
+
+    # Write to output file
+    outfile = "%s.tmp" %(args.outfile)
+    write_file(outfile,data)
+    os.rename(outfile, args.outfile)
+
+    logger.info("*** FINISHED PYTHON CONFIGURATION HELPER ****\n")
 
 
 if __name__ == '__main__':

@@ -340,7 +340,7 @@ class TestUtils(TestCase):
         self.assertEqual(cm.exception.code, 1)
 
         print("Case 3: File doesn't exist, but not required, should return None")
-        self.assertEqual(get_fullpath(tmpfile),None)
+        self.assertEqual(get_fullpath(tmpfile,required=False),None)
 
     #TODO: need to test api_get
     #TODO: need to test api_get_pagination
