@@ -39,10 +39,11 @@ def parse_image_uri(image):
     '''
 
     # First split the docker image name by /
+    image = image.replace('docker://','')
     image = image.split('/')
 
     # If there are two parts, we have namespace with repo (and maybe tab)
-    if len(image) == 2:
+    if len(image) >= 2:
         namespace = image[0]
         image = image[1]
 
@@ -74,12 +75,11 @@ def parse_image_uri(image):
 
 def get_tags_shell(image):
     '''get_tags_shell is a wrapper to run docker.api.get_tags with additional parsing
-    of the input string
+    of the input string. It is assumed that a tag is not provided.
     :image: the image name to be parsed by parse_image_uri
     '''
     parsed = parse_image_uri(image)
     repo_name = parsed['repo_name']
-    repo_tag = parsed['repo_tag']
     namespace = parsed['namespace']
 
     return get_tags(namespace=namespace,
