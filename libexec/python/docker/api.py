@@ -106,6 +106,19 @@ class DockerApiConnection(ApiConnection):
         return {"Accept":'application/vnd.docker.distribution.manifest.v2+json,application/vnd.docker.distribution.manifest.list.v2+json',
                'Content-Type':'application/json; charset=utf-8'}
 
+    def check_errors(self,response,exit=True):
+        '''take a response with errors key, iterate through errors in expected format
+        and exit upon completion
+        '''
+        if "errors" in response:
+            for error in response['errors']:
+                bot.error("%s: %s" %(error['code'],error['message']))
+                if error['code'] == "UNAUTHORIZED":
+                    bot.error("Check image existence, capitalization, and permissions.")
+            if exit:
+                sys.exit(1)
+        return response
+
 
     def load_image(self,image):
         '''load_image parses the image uri, and loads the different image parameters into
@@ -261,7 +274,8 @@ class DockerApiConnection(ApiConnection):
             bot.error("Error getting manifest for %s, exiting." %repo_uri)
             sys.exit(1)
 
-        return response
+        # If we have errors, don't continue
+        return self.check_errors(response)
 
 
     def get_layer(self,image_id,download_folder=None,change_perms=False,return_tmp=False):
