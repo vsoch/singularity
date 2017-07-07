@@ -61,25 +61,11 @@ int _singularity_runtime_ns_pid(void) {
 
 #ifdef NS_CLONE_NEWPID
     singularity_message(DEBUG, "Using PID namespace: CLONE_NEWPID\n");
-    singularity_priv_escalate();
-    singularity_message(DEBUG, "Virtualizing PID namespace\n");
-    if ( unshare(CLONE_NEWPID) < 0 ) {
-        singularity_message(ERROR, "Could not virtualize PID namespace: %s\n", strerror(errno));
-        ABORT(255);
-    }
-    singularity_priv_drop();
     enabled = 1;
 
 #else
 #ifdef NS_CLONE_PID
     singularity_message(DEBUG, "Using PID namespace: CLONE_PID\n");
-    singularity_priv_escalate();
-    singularity_message(DEBUG, "Virtualizing PID namespace\n");
-    if ( unshare(CLONE_NEWPID) < 0 ) {
-        singularity_message(ERROR, "Could not virtualize PID namespace: %s\n", strerror(errno));
-        ABORT(255);
-    }
-    singularity_priv_drop();
     enabled = 1;
 
 #else
@@ -90,19 +76,13 @@ int _singularity_runtime_ns_pid(void) {
 #endif
 
     if ( enabled == 1 ) {
-        // PID namespace requires a fork to activate!
-        if ( singularity_registry_get("DAEMON") )
+        singularity_message(DEBUG, "Virtualizing PID namespace\n");
+        
+        if ( singularity_registry_get("DAEMON") ) {
             singularity_fork_daemonize();
-        else
-            singularity_fork_run(0);
-        // singularity_fork_run();
-
-        // At this point, we are now PID 1; when we later exec the payload, it will also be PID 1.
-        // Unfortunately, PID 1 in Linux has special signal handling rules (the _only_ signal that
-        // will terminate the process is SIGKILL; all other signals are ignored).  Hence, we fork
-        // one more time.  This makes PID 1 a shim process and the payload process PID 2 (meaning
-        // that the payload gets the "normal" signal handling rules it would expect).
-        // singularity_fork_run();
+        } else {
+            singularity_fork_run(CLONE_NEWPID);
+        }
 
         singularity_registry_set("PIDNS_ENABLED", "1");
     }

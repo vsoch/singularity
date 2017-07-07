@@ -304,8 +304,11 @@ pid_t singularity_fork(unsigned int flags) {
     prepare_fork();
 
     singularity_message(VERBOSE2, "Forking child process\n");
+    
+    singularity_priv_escalate();
     child_pid = fork_ns(flags);
-
+    singularity_priv_drop();
+    
     if ( child_pid == 0 ) {
         singularity_message(VERBOSE2, "Hello from child process\n");
 
@@ -348,7 +351,7 @@ pid_t singularity_fork(unsigned int flags) {
         
         return(child_pid);
     } else {
-        singularity_message(ERROR, "Failed to fork child process\n");
+        singularity_message(ERROR, "Failed to fork child process: %s\n", strerror(errno));
         ABORT(255);
     }    
 }
@@ -360,11 +363,8 @@ void singularity_fork_run(unsigned int flags) {
     child = singularity_fork(flags);
 
     if ( child == 0 ) {
-        
         return;
     } else if ( child > 0 ) {
-        
-        
         retval = wait_child();
         exit(retval);
     }
@@ -410,7 +410,7 @@ int singularity_fork_daemonize() {
     int i = 0;
     pid_t child;
 
-    child = singularity_fork(0);
+    child = singularity_fork(CLONE_NEWPID);
 
     if ( child == 0 ) {
         return(0);
