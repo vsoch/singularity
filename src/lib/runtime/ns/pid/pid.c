@@ -91,6 +91,10 @@ int _singularity_runtime_ns_pid(void) {
 
     if ( enabled == 1 ) {
         // PID namespace requires a fork to activate!
+        if ( singularity_registry_get("DAEMON") )
+            singularity_fork_daemonize();
+        else
+            singularity_fork_run(0);
         // singularity_fork_run();
 
         // At this point, we are now PID 1; when we later exec the payload, it will also be PID 1.
@@ -131,7 +135,7 @@ int _singularity_runtime_ns_pid_join(void) {
     close(pid_fd);
     
     /* Enable PID NS by forking into a child */
-    singularity_fork_run();
+    singularity_fork_run(0);
     singularity_registry_set("PIDNS_ENABLED", "1");
     
     return(0);
