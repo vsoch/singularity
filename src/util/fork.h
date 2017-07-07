@@ -26,7 +26,7 @@
     // Wrap the fork() system call and create the necessary communication
     // pipes and signal handlers so that signals are correctly passed around
     // between children and parents.
-    pid_t singularity_fork(void);
+    pid_t singularity_fork(unsigned int flags);
 
 
     // SINGLARITY_FORK_RUN()
@@ -36,7 +36,7 @@
     // then the parent will also exit with the same exit code as the parent.
     // Similar to singularity_fork() above, this will maintain the proper
     // communication channels for signal handling.
-    void singularity_fork_run(void);
+    void singularity_fork_run(unsigned int flags);
 
 
     // SINGULARITY_FORK_EXEC

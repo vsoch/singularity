@@ -148,10 +148,10 @@ static void signal_go_ahead(char code) {
 static int wait_child() {
     int child_ok = 1;
     int retval, tmpstatus;
+
+    singularity_message(DEBUG, "Parent process is waiting on child process\n");
     
-    do {
-        singularity_message(DEBUG, "Parent process is waiting on child process\n");
-        
+    do {            
         /* Poll the signal handle read pipes to wait for any written signals */
         while ( -1 == (retval = poll(fds, 2, -1)) && errno == EINTR ) {}
         if ( -1 == retval ) {
@@ -161,6 +161,7 @@ static int wait_child() {
             
         /* When SIGCHILD is received, set child_ok = 0 to break out of loop */
         if (fds[0].revents) {
+            singularity_message(DEBUG, "SIGCHLD raised, parent is exiting\n");
             child_ok = 0;
         }
 
@@ -172,7 +173,7 @@ static int wait_child() {
                 singularity_message(ERROR, "Failed to read from signal handler pipe: %s\n", strerror(errno));
                 ABORT(255);
             }
-            singularity_message(VERBOSE2, "Sending signal to child: %d", signum);
+            singularity_message(VERBOSE2, "Sending signal to child: %d\n", signum);
             kill(child_pid, signum);
         }
     } while( child_ok );
@@ -203,7 +204,7 @@ static int fork_ns(unsigned int flags) {
     struct rlimit stack_limit;
 
     if ( -1 == getrlimit(RLIMIT_STACK, &stack_limit) ) {
-        singularity_message(ERROR, "Unable to get current stack limit: %d\n", strerror(errno));
+        singularity_message(ERROR, "Unable to get current stack limit: %s\n", strerror(errno));
         ABORT(255);
     }
     
@@ -223,58 +224,13 @@ static int fork_ns(unsigned int flags) {
     return retval;
 }
 
-pid_t singularity_fork(unsigned int flags) {
-    int pipes[2];
-    prepare_fork();
-
-    singularity_message(VERBOSE2, "Forking child process\n");
-    child_pid = fork_ns(flags);
-
-    if ( child_pid == 0 ) {
-        singularity_message(VEROSE2, "Hello from child process\n");
-
-        wait_for_go_ahead();
-    } else if ( child_pid > 0 ) {
-        singularity_message(VERBOSE2, "Hello from parent process\n");
-        
-        /* Set signal mask to block all signals while we set up sig actions */
-        sigset_t blocked_mask, old_mask, empty_mask;
-        sigfillset(&blocked_mask);
-        sigemptyset(&empty_mask);
-        sigprocmask(SIG_SETMASK, &blocked_mask, &old_mask);
-
-        /* Now that we can't receive any signals, install signal handlers for all signals we want to catch */
-        install_generic_signal_handle();
-        install_sigchld_signal_handle();
-
-        /* Set signal mask back to the original mask, unblocking the blocked signals */
-        sigprocmask(SIG_SETMASK, &old_mask, NULL);
-
-        /* Set fds[n].fd to the read pipes created earlier */
-        fds[0].fd = sigchld_signal_rpipe;
-        fds[0].events = POLLIN;
-        fds[0].revents = 0;
-        fds[1].fd = generic_signal_rpipe;
-        fds[1].events = POLLIN;
-        fds[1].revents = 0;
-
-        /* Drop privs if we're SUID */
-        if ( singularity_priv_is_suid() == 0 ) {
-            singularity_message(DEBUG, "Dropping permissions\n");
-            singularity_priv_drop();
-        }
-
-        /* Allow child process to continue */
-        signal_go_ahead(0);
-    } else {
-        singularity_message(ERROR, "Failed to fork child process\n");
-        ABORT(255);
-    }    
-}
-
 void install_generic_signal_handle() {
+    int pipes[2];
     struct sigaction action;
-
+    sigset_t empty_mask;
+    
+    sigemptyset(&empty_mask);
+    
     /* Fill action with handle_signal function */
     action.sa_sigaction = &handle_signal;
     action.sa_flags = SA_SIGINFO|SA_RESTART;
@@ -317,7 +273,11 @@ void install_generic_signal_handle() {
 }
 
 void install_sigchld_signal_handle() {
+    int pipes[2];
     struct sigaction action;
+    sigset_t empty_mask;
+    
+    sigemptyset(&empty_mask);
 
     /* Fill action with handle_sigchld function */
     action.sa_sigaction = &handle_sigchld;
@@ -340,6 +300,59 @@ void install_sigchld_signal_handle() {
     sigchld_signal_wpipe = pipes[1];
 }
 
+pid_t singularity_fork(unsigned int flags) {
+    prepare_fork();
+
+    singularity_message(VERBOSE2, "Forking child process\n");
+    child_pid = fork_ns(flags);
+
+    if ( child_pid == 0 ) {
+        singularity_message(VERBOSE2, "Hello from child process\n");
+
+        wait_for_go_ahead();
+        singularity_message(DEBUG, "Received go-ahead from parent, continuing\n");
+        
+        return(child_pid);
+    } else if ( child_pid > 0 ) {
+        singularity_message(VERBOSE2, "Hello from parent process\n");
+        
+        /* Set signal mask to block all signals while we set up sig actions */
+        sigset_t blocked_mask, old_mask;
+        sigfillset(&blocked_mask);
+        sigprocmask(SIG_SETMASK, &blocked_mask, &old_mask);
+
+        /* Now that we can't receive any signals, install signal handlers for all signals we want to catch */
+        install_generic_signal_handle();
+        install_sigchld_signal_handle();
+
+        /* Set signal mask back to the original mask, unblocking the blocked signals */
+        sigprocmask(SIG_SETMASK, &old_mask, NULL);
+
+        /* Set fds[n].fd to the read pipes created earlier */
+        fds[0].fd = sigchld_signal_rpipe;
+        fds[0].events = POLLIN;
+        fds[0].revents = 0;
+        fds[1].fd = generic_signal_rpipe;
+        fds[1].events = POLLIN;
+        fds[1].revents = 0;
+
+        /* Drop privs if we're SUID */
+        if ( singularity_priv_is_suid() == 0 ) {
+            singularity_message(DEBUG, "Dropping permissions\n");
+            singularity_priv_drop();
+        }
+
+        /* Allow child process to continue */
+        singularity_message(DEBUG, "Signalling go-ahead to child\n");
+        signal_go_ahead(0);
+        
+        return(child_pid);
+    } else {
+        singularity_message(ERROR, "Failed to fork child process\n");
+        ABORT(255);
+    }    
+}
+
 void singularity_fork_run(unsigned int flags) {
     pid_t child;
     int retval;
@@ -357,197 +370,13 @@ void singularity_fork_run(unsigned int flags) {
     }
 }
 
-pid_t singularity_fork(void) {
-    int pipes[2];
-
-    // From: signal_pre_fork()
-    if ( pipe2(pipes, O_CLOEXEC) < 0 ) {
-        singularity_message(ERROR, "Failed to create watchdog communication pipes: %s\n", strerror(errno));
-        ABORT(255);
-    }
-    watchdog_rpipe = pipes[0];
-    watchdog_wpipe = pipes[1];
-
-    prepare_fork();
-
-    // Fork child
-    singularity_message(VERBOSE2, "Forking child process\n");
-    child_pid = fork();
-
-    if ( child_pid == 0 ) {
-        singularity_message(VERBOSE2, "Hello from child process\n");
-
-        if (watchdog_wpipe != -1) {
-            singularity_message(DEBUG, "Closing watchdog write pipe\n");
-            close(watchdog_wpipe);
-        }
-        watchdog_wpipe = -1;
-
-        wait_for_go_ahead();
-
-        singularity_message(DEBUG, "Child process is returning control to process thread\n");
-        return(0);
-
-    } else if ( child_pid > 0 ) {
-        singularity_message(VERBOSE2, "Hello from parent process\n");
-
-        /* Set signal mask to block all signals while we set up sig actions */
-        sigset_t blocked_mask, old_mask, empty_mask;
-        sigfillset(&blocked_mask);
-        sigemptyset(&empty_mask);
-        sigprocmask(SIG_SETMASK, &blocked_mask, &old_mask);
-
-        /* Fill action with pointer to handle_signal function */
-        struct sigaction action;
-        action.sa_sigaction = &handle_signal;
-        action.sa_flags = SA_SIGINFO|SA_RESTART;
-        // All our handlers are signal safe.
-        action.sa_mask = empty_mask;
-
-        struct pollfd fds[3];
-        int retval;
-        int child_ok = 1;
-
-        /* Now that we can't receive any signals, install signal handlers for all signals we want to catch */
-        singularity_message(DEBUG, "Assigning sigaction()s\n");
-        if ( -1 == sigaction(SIGINT, &action, NULL) ) {
-            singularity_message(ERROR, "Failed to install SIGINT signal handler: %s\n", strerror(errno));
-            ABORT(255);
-        }
-        if ( -1 == sigaction(SIGQUIT, &action, NULL) ) {
-            singularity_message(ERROR, "Failed to install SIGQUIT signal handler: %s\n", strerror(errno));
-            ABORT(255);
-        }
-        if ( -1 == sigaction(SIGTERM, &action, NULL) ) {
-            singularity_message(ERROR, "Failed to install SIGTERM signal handler: %s\n", strerror(errno));
-            ABORT(255);
-        }
-        if ( -1 == sigaction(SIGHUP, &action, NULL) ) {
-            singularity_message(ERROR, "Failed to install SIGHUP signal handler: %s\n", strerror(errno));
-            ABORT(255);
-        }
-        if ( -1 == sigaction(SIGUSR1, &action, NULL) ) {
-            singularity_message(ERROR, "Failed to install SIGUSR1 signal handler: %s\n", strerror(errno));
-            ABORT(255);
-        }
-        if ( -1 == sigaction(SIGUSR2, &action, NULL) ) {
-            singularity_message(ERROR, "Failed to install SIGUSR2 signal handler: %s\n", strerror(errno));
-            ABORT(255);
-        }
-
-        /* For SIGCHILD, use handle_sigchld() instaed of handle_signal() [SIGCHILD raised when child terminates] */
-        action.sa_sigaction = &handle_sigchld;
-        if ( -1 == sigaction(SIGCHLD, &action, NULL) ) {
-            singularity_message(ERROR, "Failed to install SIGCHLD signal handler: %s\n", strerror(errno));
-            ABORT(255);
-        }
-
-        /* Open pipes for handle_signal() to write to */
-        singularity_message(DEBUG, "Creating generic signal pipes\n");
-        if ( -1 == pipe2(pipes, O_CLOEXEC) ) {
-            singularity_message(ERROR, "Failed to create communication pipes: %s\n", strerror(errno));
-            ABORT(255);
-        }
-        generic_signal_rpipe = pipes[0];
-        generic_signal_wpipe = pipes[1];
-
-        /* Open pipes for handle_sigchld() to write to */
-        singularity_message(DEBUG, "Creating sigchld signal pipes\n");
-        if ( -1 == pipe2(pipes, O_CLOEXEC) ) {
-            singularity_message(ERROR, "Failed to create communication pipes: %s\n", strerror(errno));
-            ABORT(255);
-        }
-        sigchld_signal_rpipe = pipes[0];
-        sigchld_signal_wpipe = pipes[1];
-
-        /* Set signal mask back to the original mask, unblocking the blocked signals */
-        sigprocmask(SIG_SETMASK, &old_mask, NULL);
-
-        /* Set fds[n].fd to the read pipes created earlier */
-        fds[0].fd = sigchld_signal_rpipe;
-        fds[0].events = POLLIN;
-        fds[0].revents = 0;
-        fds[1].fd = generic_signal_rpipe;
-        fds[1].events = POLLIN;
-        fds[1].revents = 0;
-        fds[2].fd = watchdog_rpipe;
-        fds[2].events = POLLIN;
-        fds[2].revents = 0;
-
-        if ( singularity_priv_is_suid() == 0 ) {
-            singularity_message(DEBUG, "Dropping permissions\n");
-            singularity_priv_drop();
-        }
-
-        /* Now that all signal handlers are set up, allow child process to proceed */
-        signal_go_ahead(0);
-
-        do {
-            singularity_message(DEBUG, "Waiting on signal from watchdog\n");
-            while ( -1 == (retval = poll(fds, watchdog_rpipe == -1 ? 2 : 3, -1)) && errno == EINTR ) {}
-            if ( -1 == retval ) {
-                singularity_message(ERROR, "Failed to wait for file descriptors: %s\n", strerror(errno));
-                ABORT(255);
-            }
-
-            /* When SIGCHILD is received, set child_ok = 0 to break out of loop */
-            if (fds[0].revents) {
-                child_ok = 0;
-            }
-
-            /* If we catch any other signal, */
-            if (fds[1].revents) {
-                char signum = SIGKILL;
-                while (-1 == (retval = read(generic_signal_rpipe, &signum, 1)) && errno == EINTR) {} // Flawfinder: ignore
-                if (-1 == retval) {
-                    singularity_message(ERROR, "Failed to read from signal handler pipe: %s\n", strerror(errno));
-                    ABORT(255);
-                }
-                kill(child_pid, signum);
-            }
-            if (watchdog_rpipe != -1 && fds[2].revents) {
-                // Parent died.  Immediately kill child.  NOTE that this only
-                // works if the child has also dropped privileges.
-                kill(child_pid, SIGKILL);
-                close(watchdog_rpipe);
-                watchdog_rpipe = -1;
-            }
-        } while ( child_ok );
-
-        singularity_message(DEBUG, "Parent process is exiting\n");
-
-        return(child_pid);
-
-    } else {
-        singularity_message(ERROR, "Failed to fork child process\n");
-        ABORT(255);
-    }
-}
-
-
-void singularity_fork_run(void) {
-    int tmpstatus;
-    int retval = 0;
-    pid_t child;
-
-    if ( ( child = singularity_fork() ) > 0 ) {
-        singularity_message(DEBUG, "Waiting on child process\n");
-                                
-        waitpid(child, &tmpstatus, 0);
-        retval = WEXITSTATUS(tmpstatus);
-        exit(retval);
-    }
-
-    return;
-}
-
 int singularity_fork_exec(char **argv) {
     int tmpstatus;
-    int retval = 0;
+    int retval;
     int i = 0;
     pid_t child;
 
-    child = singularity_fork();
+    child = singularity_fork(0);
 
     if ( child == 0 ) {
         while(1) {
@@ -568,10 +397,7 @@ int singularity_fork_exec(char **argv) {
         }
 
     } else if ( child > 0 ) {
-        singularity_message(DEBUG, "Waiting on child process\n");
-                                
-        waitpid(child, &tmpstatus, 0);
-        retval = WEXITSTATUS(tmpstatus);
+        retval = wait_child();
     }
 
     singularity_message(DEBUG, "Returning from singularity_fork_exec with: %d\n", retval);
@@ -584,15 +410,18 @@ int singularity_fork_daemonize() {
     int i = 0;
     pid_t child;
 
-    child = fork();
+    child = singularity_fork(0);
 
     if ( child == 0 ) {
         return(0);
     } else if ( child > 0 ) {
         singularity_message(DEBUG, "Successfully spawned daemon, terminating\n");
-
+        
         /* In the future, code will go here to execute action.c workflow for startscript */
         exit(0);
+    } else {
+        singularity_message(ERROR, "Unable to fork: %s\n", strerror(errno));
+        ABORT(255);
     }
     
     singularity_message(ERROR, "Reached unreachable code. How did you get here?\n");
