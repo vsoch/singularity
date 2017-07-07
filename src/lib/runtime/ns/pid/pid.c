@@ -61,12 +61,10 @@ int _singularity_runtime_ns_pid(void) {
 
 #ifdef NS_CLONE_NEWPID
     singularity_message(DEBUG, "Using PID namespace: CLONE_NEWPID\n");
-    enabled = 1;
-
+    
 #else
 #ifdef NS_CLONE_PID
     singularity_message(DEBUG, "Using PID namespace: CLONE_PID\n");
-    enabled = 1;
 
 #else
     singularity_message(WARNING, "Skipping PID namespace creation, support not available on host\n");
@@ -75,17 +73,16 @@ int _singularity_runtime_ns_pid(void) {
 #endif
 #endif
 
-    if ( enabled == 1 ) {
-        singularity_message(DEBUG, "Virtualizing PID namespace\n");
+    singularity_message(DEBUG, "Virtualizing PID namespace\n");
         
-        if ( singularity_registry_get("DAEMON") ) {
-            singularity_fork_daemonize();
-        } else {
-            singularity_fork_run(CLONE_NEWPID);
-        }
-
-        singularity_registry_set("PIDNS_ENABLED", "1");
+    if ( singularity_registry_get("DAEMON") ) {
+        singularity_fork_daemonize();
+    } else {
+        singularity_fork_run(CLONE_NEWPID);
     }
+
+    singularity_registry_set("PIDNS_ENABLED", "1");
+   
 
     return(0);
 }
