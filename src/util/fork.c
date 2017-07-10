@@ -196,8 +196,7 @@ static int clone_fn(void *data_ptr) {
 static int fork_ns(unsigned int flags) {
     fork_state_t state;
     
-    if ( sigsetjmp(state.env, 1) )
-    {
+    if ( sigsetjmp(state.env, 1) ) {
         return 0;
     }
 
