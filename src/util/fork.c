@@ -369,7 +369,7 @@ void singularity_fork_run(unsigned int flags) {
     }
 }
 
-int singularity_fork_exec(char **argv) {
+int singularity_fork_exec(unsigned int flags, char **argv) {
     int tmpstatus;
     int retval;
     int i = 0;
@@ -415,17 +415,17 @@ int singularity_fork_daemonize() {
         return(0);
     } else if ( child > 0 ) {
         singularity_message(DEBUG, "Successfully spawned daemon, terminating\n");
-        
+
         /* In the future, code will go here to execute action.c workflow for startscript */
         exit(0);
     } else {
         singularity_message(ERROR, "Unable to fork: %s\n", strerror(errno));
         ABORT(255);
     }
-    
+
     singularity_message(ERROR, "Reached unreachable code. How did you get here?\n");
     ABORT(255);
 
     return(0);
-}    
+}
 

@@ -42,7 +42,7 @@
     // SINGULARITY_FORK_EXEC
     // Fork and exec a child system command, wait for it to return, and then
     // return with the appropriate exit value.
-    int singularity_fork_exec(char **argv);
+    int singularity_fork_exec(unsigned int flags, char **argv);
 
 
     // SINGULARITY_FORK_DAEMONIZE
