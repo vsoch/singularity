@@ -43,9 +43,6 @@
 
 
 int _singularity_runtime_ns_pid(void) {
-    int enabled = -1;
-
-
 #ifdef SINGULARITY_NO_NEW_PRIVS
     // Use PID namespace when NO_NEW_PRIVS is not supported
     if ( singularity_config_get_bool(ALLOW_PID_NS) <= 0 ) {
@@ -117,10 +114,3 @@ int _singularity_runtime_ns_pid_join(void) {
     
     return(0);
 }
-
-/*
-int singularity_ns_pid_enabled(void) {
-    singularity_message(DEBUG, "Checking PID namespace enabled: %d\n", enabled);
-    return(enabled);
-}
-*/
