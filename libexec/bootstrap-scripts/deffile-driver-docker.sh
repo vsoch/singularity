@@ -40,6 +40,11 @@ if [ -z "${SINGULARITY_ROOTFS:-}" ]; then
     exit 1
 fi
 
+# The user wants to disable https
+if [ -z "${NOHTTPS:-}" ]; then
+    export NOHTTPS
+fi
+
 if [ -z "${FROM:-}" ]; then
     message ERROR "Required Definition tag 'From:' not defined.\n"
     exit 1
