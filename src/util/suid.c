@@ -108,6 +108,7 @@ int singularity_suid_init(void) {
     }
 
 #else
+    is_enabled = 0;
     singularity_message(VERBOSE, "Running NON-SUID program workflow\n");
 
     singularity_message(DEBUG, "Checking program has appropriate permissions\n");
@@ -124,7 +125,7 @@ int singularity_suid_enabled(void) {
     return(is_enabled);
 }
 
-int singularity_allow_setuid(void) {
+int singularity_allow_container_setuid(void) {
     int ret = 0;
     if ( singularity_config_get_bool(ALLOW_ROOT_CAPABILITIES) ) {
         if ( singularity_registry_get("ALLOW_SETUID") && getuid() == 0 ) {
