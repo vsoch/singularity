@@ -1,4 +1,5 @@
 /* 
+ * Copyright (c) 2017-2018, SyLabs, Inc. All rights reserved.
  * Copyright (c) 2017, SingularityWare, LLC. All rights reserved.
  *
  * Copyright (c) 2015-2017, Gregory M. Kurtzer. All rights reserved.
@@ -57,13 +58,11 @@ int _singularity_image_squashfs_mount(struct image_object *image, char *mount_po
         mntflags &= ~MS_NOSUID;
     }
 
-    singularity_priv_escalate();
     singularity_message(VERBOSE, "Mounting squashfs image: %s -> %s\n", loop_dev, mount_point);
     if ( singularity_mount(loop_dev, mount_point, "squashfs", mntflags, "errors=remount-ro") < 0 ) {
         singularity_message(ERROR, "Failed to mount squashfs image in (read only): %s\n", strerror(errno));
         ABORT(255);
     }
-    singularity_priv_drop();
 
     return(0);
 }

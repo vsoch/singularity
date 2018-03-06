@@ -52,6 +52,8 @@ src/include/stamp-h1
 src/.dirstamp
 src/wrapper
 src/wrapper-suid
+src/start
+src/docker-extract
 
 src/.deps/
 src/.libs/
