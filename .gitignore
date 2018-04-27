@@ -6,6 +6,7 @@ singularity-*.tar.gz
 *.m4
 config.*
 *.pyc
+*.swp
 
 Makefile
 Makefile.in
@@ -54,6 +55,7 @@ src/wrapper
 src/wrapper-suid
 src/start
 src/docker-extract
+src/prepheader
 
 src/.deps/
 src/.libs/

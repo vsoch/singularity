@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <libgen.h>
 
 #include "config.h"
 #include "util/file.h"
@@ -32,14 +33,96 @@
 
 #define MAX_LINE_LEN 2048
 
+struct resolved_container_path {
+    char *mountdir;
+    char *finaldir;
+    char *overlay;
+    char *session;
+};
+
+static void resolve_container_path(struct resolved_container_path *container_path) {
+    if ( container_path->mountdir == NULL ) {
+        container_path->mountdir = realpath(CONTAINER_MOUNTDIR, NULL); // Flawfinder: ignore
+        if ( container_path->mountdir == NULL ) {
+            singularity_message(ERROR, "Failed to resolve path to %s\n", CONTAINER_MOUNTDIR);
+            ABORT(255);
+        }
+    }
+    if ( container_path->finaldir == NULL ) {
+        container_path->finaldir = realpath(CONTAINER_FINALDIR, NULL); // Flawfinder: ignore
+        if ( container_path->finaldir == NULL ) {
+            singularity_message(ERROR, "Failed to resolve path to %s\n", CONTAINER_FINALDIR);
+            ABORT(255);
+        }
+    }
+    if ( container_path->overlay == NULL ) {
+        container_path->overlay = realpath(CONTAINER_OVERLAY, NULL); // Flawfinder: ignore
+        if ( container_path->overlay == NULL ) {
+            singularity_message(ERROR, "Failed to resolve path to %s\n", CONTAINER_OVERLAY);
+            ABORT(255);
+        }
+    }
+    if ( container_path->session == NULL ) {
+        container_path->session = realpath(SESSIONDIR, NULL); // Flawfinder: ignore
+        if ( container_path->session == NULL ) {
+            singularity_message(ERROR, "Failed to resolve path to %s\n", SESSIONDIR);
+            ABORT(255);
+        }
+    }
+}
+
 int singularity_mount(const char *source, const char *target,
                       const char *filesystemtype, unsigned long mountflags,
                       const void *data) {
     int ret;
+    int mount_errno;
     uid_t fsuid = 0;
+    char dest[PATH_MAX];
+    char *realdest, *realtarget;
+    int target_fd = -1;
+    static struct resolved_container_path container_path;
+
+    resolve_container_path(&container_path);
+
+    if ( ( mountflags & MS_REMOUNT ) == 0 ) {
+        target_fd = open(target, O_RDONLY);
+
+        if ( target_fd < 0 ) {
+            singularity_message(ERROR, "Target %s doesn't exist\n", target);
+            ABORT(255);
+        }
+
+        if ( snprintf(dest, PATH_MAX-1, "/proc/self/fd/%d", target_fd) < 0 ) {
+            singularity_message(ERROR, "Failed to determine path for target file descriptor\n");
+            ABORT(255);
+        }
+        realtarget = dest;
+    } else {
+        realtarget = (char *)target;
+    }
 
     if ( ( mountflags & MS_BIND ) ) {
         fsuid = singularity_priv_getuid();
+    }
+
+    realdest = realpath(realtarget, NULL); // Flawfinder: ignore
+    if ( realdest == NULL ) {
+        singularity_message(ERROR, "Failed to get real path of %s %s\n", target, dest);
+        ABORT(255);
+    }
+
+    if ( (mountflags & MS_PRIVATE) == 0 && (mountflags & MS_SLAVE) == 0 ) {
+        if ( strncmp(realdest, container_path.mountdir, strlen(container_path.mountdir)) != 0 &&
+             strncmp(realdest, container_path.finaldir, strlen(container_path.finaldir)) != 0 &&
+             strncmp(realdest, container_path.overlay, strlen(container_path.overlay)) != 0 &&
+             strncmp(realdest, container_path.session, strlen(container_path.session)) != 0 ) {
+            singularity_message(VERBOSE, "Ignored, try to mount %s outside of container %s\n", target, realdest);
+            free(realdest);
+            if ( target_fd >= 0 ) {
+                close(target_fd);
+            }
+            return(0);
+        }
     }
 
     /* don't modify user groups */
@@ -51,12 +134,21 @@ int singularity_mount(const char *source, const char *target,
         /* NFS root_squash option set uid 0 to nobody, force use of real user ID */
         setfsuid(fsuid);
     }
-    ret = mount(source, target, filesystemtype, mountflags, data);
+
+    ret = mount(source, realtarget, filesystemtype, mountflags, data);
+    mount_errno = errno;
+
+    if ( target_fd >= 0 ) {
+        close(target_fd);
+    }
+    free(realdest);
+
     if ( singularity_priv_userns_enabled() == 0 && seteuid(singularity_priv_getuid()) < 0 ) {
         singularity_message(ERROR, "Failed to drop privileges: %s\n", strerror(errno));
         ABORT(255);
     }
 
+    errno = mount_errno;
     return ret;
 }
 
@@ -64,9 +156,15 @@ int check_mounted(char *mountpoint) {
     int retval = -1;
     FILE *mounts;
     char *line = (char *)malloc(MAX_LINE_LEN);
-    char *rootfs_dir = CONTAINER_FINALDIR;
-    unsigned int mountpoint_len = strlength(mountpoint, PATH_MAX);
-    char *real_mountpoint;
+    char *real_mountpoint = joinpath(CONTAINER_FINALDIR, mountpoint);
+    char *resolved_mountpoint = realpath(real_mountpoint, NULL); // Flawfinder: ignore
+
+    if ( resolved_mountpoint == NULL ) {
+        free(real_mountpoint);
+        return(retval);
+    }
+
+    singularity_message(DEBUG, "Checking if currently mounted: %s\n", mountpoint);
 
     singularity_message(DEBUG, "Opening /proc/mounts\n");
     if ( ( mounts = fopen("/proc/mounts", "r") ) == NULL ) { // Flawfinder: ignore
@@ -74,43 +172,21 @@ int check_mounted(char *mountpoint) {
         ABORT(255);
     }
 
-    if ( mountpoint[mountpoint_len-1] == '/' ) {
-        singularity_message(DEBUG, "Removing trailing slash from string: %s\n", mountpoint);
-        mountpoint[mountpoint_len-1] = '\0';
-    }
-
-    real_mountpoint = realpath(mountpoint, NULL); // Flawfinder: ignore
-    if ( real_mountpoint == NULL ) {
-        // mountpoint doesn't exists
-        return(retval);
-    }
-
     singularity_message(DEBUG, "Iterating through /proc/mounts\n");
-    while ( fgets(line, MAX_LINE_LEN, mounts) != NULL ) {
-        (void) strtok(strdup(line), " ");
+    while ( ( retval < 0 ) && ( fgets(line, MAX_LINE_LEN, mounts) != NULL ) ) {
+        (void) strtok(line, " ");
         char *mount = strtok(NULL, " ");
 
-        // Check to see if mountpoint is already mounted
-        if ( strcmp(joinpath(rootfs_dir, real_mountpoint), mount) == 0 ) {
-            singularity_message(DEBUG, "Mountpoint is already mounted: %s\n", mountpoint);
+        if ( strcmp(mount, resolved_mountpoint) == 0 ) {
+            singularity_message(DEBUG, "Mountpoint is already mounted: %s\n", resolved_mountpoint);
             retval = 1;
-            break;
-        }
-
-        // Check to see if path is in container root
-        if ( strncmp(rootfs_dir, mount, strlength(rootfs_dir, 1024)) != 0 ) {
-            continue;
-        }
-
-        // Check to see if path is ot the container root
-        if ( strcmp(mount, rootfs_dir) == 0 ) {
-            continue;
         }
     }
 
     fclose(mounts);
     free(line);
     free(real_mountpoint);
+    free(resolved_mountpoint);
 
     return(retval);
 }
