@@ -48,7 +48,7 @@ SECBUILD_DEFFILE="$BUILDTMP/secbuild.def"
 
 cat > "$SECBUILD_DEFFILE" << DEFFILE
 Bootstrap: docker
-From: ubuntu:latest
+From: ubuntu:17.10
 
 %setup
     cp -a . $SECBUILD_SINGULARITY
