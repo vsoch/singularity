@@ -58,7 +58,7 @@ From: ubuntu:17.10
     apt-get update -y
     apt-get install -y git gcc python make automake autoconf libtool
     apt-get install -y squashfs-tools curl uuid-dev libssl-dev libarchive-dev
-    apt-get install -y debootstrap yum zypper
+    apt-get install -y debootstrap yum zypper libzypp libzypp-dev
     apt-get clean
     apt-get autoclean
     rm -rf /usr/local/libexec/singularity
