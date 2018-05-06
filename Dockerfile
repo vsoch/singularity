@@ -1,7 +1,7 @@
-FROM iron/go:dev
+FROM golang:stretch
 
 # Overview:
-# alpine image with the go tools for developing Singularity
+# image with the go tools for developing Singularity
 # you should bind your singularity/src folder to /code, or
 # develop in the container. If you do the first and make
 # changes in the container, be careful about permissions of the
@@ -12,32 +12,38 @@ FROM iron/go:dev
 # docker build -t vanessa/singularity-dev .
 # 
 # Interactive Session
-# docker run -it --entrypoint sh vanessa/singularity-dev
+# docker run --privileged -it --entrypoint bash vanessa/singularity-dev
+#
+# Testing (inside container) example
+# docker run --privileged -it --entrypoint go vanessa/singularity-dev test ./tests/
 
-# For future - if we want the Dockerfile isolated from repo -
-#   We can take the repository username / branch as build-arg
-#   below shows setting defaults
-#   ARG REPO=singularityware
-#   ARG BRANCH=development-3.x
-#   and then clone the repository here (instead of ADD . /code)
+ENV PATH="${GOPATH}/bin:${PATH}"
 
-RUN echo "Installing build dependencies!\n" && \
-    apk add --update alpine-sdk linux-headers \
-                     e2fsprogs bash tar rsync squashfs-tools \
-                     openssl-dev util-linux-dev
+RUN echo "Installing build dependencies!\n" && apt-get update && \
+    apt-get install -y squashfs-tools \
+                       libssl-dev \
+                       uuid-dev \
+                       curl \
+                       libarchive-dev \ 
+                       libgpgme11-dev
+
 
 WORKDIR /code
 ENV SRC_DIR=/go/src/github.com/singularityware/singularity
 ADD . $SRC_DIR
 WORKDIR $SRC_DIR
 
-# Dependencies
-RUN go get -v github.com/golang/dep/cmd/dep && \
-    dep ensure -v
+RUN curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh && \
+    dep ensure -vendor-only
 
 # Compile the Singularity binary
 RUN ./mconfig && \
-    cd ./builddir && \
+     cd ./builddir && \
     make dep && make && make install
+
+WORKDIR $SRC_DIR
+RUN test -z $(go fmt ./...)
+
+# HEALTHCHECK go test ./tests/
 
 ENTRYPOINT ["singularity"]
