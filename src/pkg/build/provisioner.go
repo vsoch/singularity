@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/singularityware/singularity/src/pkg/build/provisioners"
 	"github.com/singularityware/singularity/src/pkg/image"
 )
 
@@ -26,9 +27,9 @@ func NewProvisionerFromURI(uri string) (p Provisioner, err error) {
 
 	switch u[0] {
 	case "docker":
-		return NewDockerProvisioner(u[1])
-	//case "shub":
-	//	return NewSHubProvisioner()
+		return provisioners.NewDockerProvisioner(u[1])
+	case "shub":
+		return provisioners.NewShubProvisioner(u[1])
 	default:
 		return nil, fmt.Errorf("Provisioner \"%s\" not supported", u[0])
 	}

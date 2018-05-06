@@ -6,7 +6,7 @@
   your rights to use or distribute this software.
 */
 
-package build
+package provisioners
 
 import (
 	"archive/tar"

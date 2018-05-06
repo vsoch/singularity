@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/singularityware/singularity/src/pkg/build"
+	"github.com/singularityware/singularity/src/pkg/sylog"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +35,7 @@ var sbuildCmd = &cobra.Command{
 		if args[0] == "sif" {
 			b, err = build.NewSifBuilderJSON(strings.NewReader(args[1]), args[2])
 			if err != nil {
-				return
+				sylog.Fatalf("Failed to build image: %s\n", err)
 			}
 		} else {
 			return

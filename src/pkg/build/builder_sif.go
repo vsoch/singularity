@@ -124,14 +124,17 @@ func NewSifBuilderJSON(r io.Reader, imagePath string) (b *sifBuilder, err error)
 }
 
 func (b *sifBuilder) Build(ctx context.Context) (err error) {
-	b.p.Provision(b.tmpfs)
+	err = b.p.Provision(b.tmpfs)
+	if err != nil {
+		return err
+	}
+
 	img, err := sif.SIFFromSandbox(b.tmpfs, b.path)
 	if err != nil {
 		return err
 	}
 
 	b.image = img
-
 	return nil
 }
 
