@@ -9,5 +9,7 @@ package main
 import "github.com/singularityware/singularity/src/cmd/singularity/cli"
 
 func main() {
+
+	// In cli/singularity.go
 	cli.ExecuteSingularity()
 }

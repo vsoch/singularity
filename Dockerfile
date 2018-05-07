@@ -37,12 +37,12 @@ RUN curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh && 
     dep ensure -vendor-only
 
 # Compile the Singularity binary
-RUN ./mconfig && \
-     cd ./builddir && \
-    make dep && make && make install
+RUN rm -rf ./builddir && ./mconfig && \
+#     cd ./builddir && \
+#    make dep && make && make install
 
-WORKDIR $SRC_DIR
-RUN test -z $(go fmt ./...)
+#WORKDIR $SRC_DIR
+#RUN test -z $(go fmt ./...)
 
 # HEALTHCHECK go test ./tests/
 
