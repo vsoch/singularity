@@ -35,6 +35,8 @@ and changes prior to that are (unfortunately) done retrospectively. Critical ite
  - Create /dev/fd and standard streams symlinks in /dev when using minimal dev
    mount or when specifying -c/-C/--contain option #1420
  - Fixed * expansion during app runscript creation #1486
+ - Fix 404 when using Arch Linux bootstrap #1731
+
 
 ## [v2.5.1](https://github.com/singularityware/singularity/releases/tag/2.5.1) (2018-05-03)
 
