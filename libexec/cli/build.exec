@@ -124,6 +124,12 @@ while true; do
             SINGULARITY_ISOLATED_BUILD=1
             shift
         ;;
+        --isolated-root)
+            shift;
+            SINGULARITY_ISOLATED_ROOT="${1:-}"
+            export SINGULARITY_ISOLATED_ROOT
+            shift;
+        ;;
         -*)
             message ERROR "Unknown option: ${1:-}\n"
             exit 1

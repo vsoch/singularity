@@ -59,7 +59,11 @@ if [ ! -f "${SINGULARITY_BUILDDEF:-}" ]; then
     exit 1
 fi
 
-BUILDDEF_DIR_NAME=$(dirname ${SINGULARITY_BUILDDEF:-})
+if [ -z "${SINGULARITY_ISOLATED_ROOT:-}" ]; then
+    BUILDDEF_DIR_NAME=$(dirname ${SINGULARITY_BUILDDEF:-})
+else
+    BUILDDEF_DIR_NAME=$(readlink -f ${SINGULARITY_ISOLATED_ROOT:-})
+fi
 BUILDDEF_DIR=$(readlink -f ${BUILDDEF_DIR_NAME:-})
 
 if [ -z "${BUILDDEF_DIR:-}" ]; then
