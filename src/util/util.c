@@ -443,8 +443,8 @@ struct tempfile *make_logfile(char *label) {
     return(tf);
 }
 
-// close all file descriptors pointing to a directory or a socket
-void fd_cleanup(void) {
+// iter on /proc/self/fd and call close_fd callback to determine file descriptors to close
+void fd_cleanup(int (*close_fd)(int fd, struct stat *st)) {
     int fd_proc;
     DIR *dir;
     struct dirent *dirent;
@@ -452,8 +452,8 @@ void fd_cleanup(void) {
     singularity_message(DEBUG, "Cleanup file descriptor table\n");
 
     if ( ( fd_proc = open("/proc/self/fd", O_RDONLY) ) < 0 ) {
-        singularity_message(ERROR, "Failed to open directory /proc/self/fd: %s\n", strerror(errno));
-        ABORT(255);
+        singularity_message(DEBUG, "Failed to open directory /proc/self/fd: %s\n", strerror(errno));
+        return;
     }
 
     if ( ( dir = fdopendir(fd_proc) ) == NULL ) {
@@ -474,7 +474,7 @@ void fd_cleanup(void) {
         if ( fd == fd_proc || fstat(fd, &st) < 0 ) {
             continue;
         }
-        if ( S_ISDIR(st.st_mode) || S_ISSOCK(st.st_mode) ) {
+        if ( close_fd(fd, &st) ) {
             close(fd);
         }
     }

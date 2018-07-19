@@ -9,6 +9,7 @@ addons:
       - uuid-dev
       - libssl-dev
       - libarchive-dev
+      - debootstrap
 
 env:
   global:

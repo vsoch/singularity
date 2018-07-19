@@ -1,21 +1,35 @@
 #!/bin/bash -ex
 
-DIST="${OS_TYPE}${OS_VERSION}"
+# This script starts docker and systemd and runs a test
 
-mkdir /tmp/$DIST
+# Mount /var/run/docker.sock and set --network=host so we can call docker from inside
+# cause some tests need it. Cannot mount to /var/run/docker.sock inside cause CentOS
+# /usr/sbin/init mounts another overlayfs on top of it
 
-cp -a . /tmp/$DIST/singularity
-cat > "/tmp/$DIST/script" << SCRIPT
-#!/bin/bash
+DOCKER_CONTAINER_NAME="test_centos_${OS_VERSION}"
 
-echo "%_var /var" > /root/.rpmmacros
-echo "%_dbpath %{_var}/lib/rpm" >> /root/.rpmmacros
+if [ "$OS_VERSION" = "6" ]; then
+    docker run --privileged -ti -e "container=docker" -v /var/run/docker.sock:/docker.sock \
+      --network=host -v "$(pwd):/build:rw"  --name "$DOCKER_CONTAINER_NAME" \
+      "centos:${OS_VERSION}" /bin/bash -exc "
+    export DOCKER_HOST=unix:///docker.sock
+    chmod o+rw /docker.sock &&
+    cd /build &&
+    .travis/centos6_setup &&
+    .travis/rpmbuild_test $OS_VERSION
+"
+else
+    docker run --privileged -d -ti -e "container=docker" -v /var/run/docker.sock:/docker.sock \
+      --network=host -v /sys/fs/cgroup:/sys/fs/cgroup -v "$(pwd):/build:rw"  --name $DOCKER_CONTAINER_NAME \
+      centos:${OS_VERSION} /usr/sbin/init
+    docker exec -ti "$DOCKER_CONTAINER_NAME" /bin/bash -exc "
+    export DOCKER_HOST=unix:///docker.sock
+    chmod o+rw /docker.sock &&
+    cd /build &&
+    .travis/rpmbuild_test $OS_VERSION
+"
+fi
 
-.travis/rpmbuild_test $OS_VERSION
-SCRIPT
-
-cd /tmp/$DIST/singularity
-
-# mounting /run for /dev/shm (python multiprocessing)
-sudo singularity exec -w -B /run --keep-privs --allow-setuid docker://${OS_TYPE}:${OS_VERSION} /bin/bash -ex /tmp/$DIST/script
-sudo rm -rf /tmp/$DIST
+docker ps -a
+docker stop $DOCKER_CONTAINER_NAME
+docker rm -v $DOCKER_CONTAINER_NAME

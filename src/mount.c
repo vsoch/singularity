@@ -49,8 +49,6 @@
 int main(int argc, char **argv) {
     struct image_object image;
 
-    fd_cleanup();
-
     singularity_config_init();
 
     singularity_priv_init();
@@ -76,9 +74,7 @@ int main(int argc, char **argv) {
 
     singularity_runtime_ns(SR_NS_MNT);
 
-    singularity_image_mount(&image, CONTAINER_MOUNTDIR);
-
-    singularity_runtime_overlayfs();
+    singularity_image_mount(&image, CONTAINER_FINALDIR);
 
     singularity_priv_drop_perm();
 

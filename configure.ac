@@ -1,5 +1,5 @@
 AC_PREREQ(2.59)
-AC_INIT([singularity],[2.5.0],[gmkurtzer@gmail.com])
+AC_INIT([singularity],[2.5.2],[gmkurtzer@gmail.com])
 
 if test -z "$prefix" -o "$prefix" = "NONE" ; then
   prefix=${ac_default_prefix}
@@ -27,7 +27,7 @@ AC_SUBST(SINGULARITY_ARCH)
 # https://www.mail-archive.com/debian-bugs-dist@lists.debian.org/msg1232579.html
 #AM_INIT_AUTOMAKE([foreign subdir-objects])
 
-AM_INIT_AUTOMAKE([foreign subdir-objects]) ## SEE ABOVE BEFORE CHANGING
+AM_INIT_AUTOMAKE([foreign subdir-objects tar-pax]) ## SEE ABOVE BEFORE CHANGING
 AC_CONFIG_SRCDIR([src])
 AC_CONFIG_HEADERS([src/config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -152,6 +152,10 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#define _GNU_SOURCE
 AC_MSG_CHECKING([for feature: NO_NEW_PRIVS])
 AC_RUN_IFELSE([AC_LANG_PROGRAM([[
                                      #include <sys/prctl.h>
+                                     #ifndef PR_SET_NO_NEW_PRIVS
+                                     # define PR_SET_NO_NEW_PRIVS 38
+                                     # define PR_GET_NO_NEW_PRIVS 39
+                                     #endif
                                    ]],
                                    [[if ( prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0) {
                                        return 1;
@@ -352,7 +356,7 @@ AC_SUBST(BUILD_SUID)
 AC_MSG_CHECKING([for git version])
 if BRANCH=`git rev-parse --abbrev-ref HEAD 2>/dev/null`; then
     if HASH=`git rev-parse --short HEAD 2>/dev/null`; then
-        GIT_VERSION="-$BRANCH.g$HASH"
+        GIT_VERSION="-$BRANCH.$HASH"
     else
         GIT_VERSION="-$BRANCH"
     fi
@@ -470,3 +474,4 @@ if test -n "$WARN_SETNS"; then
     echo "WARNING: instance feature is disabled due to lack of kernel support"
     echo
 fi
+
